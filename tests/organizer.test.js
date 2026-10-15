@@ -68,3 +68,20 @@ test('known people are linked when mentioned', () => {
   assert.equal(n.type, 'task');
   assert.deepEqual(n.people, ['Rahul Verma']);
 });
+
+test('sanitizeNote rejects or cleans anything malformed', async () => {
+  const { sanitizeNote } = await import('../js/organizer.js');
+  assert.equal(sanitizeNote({ id: 'x" onclick="evil()', text: 'hi' }), null);
+  assert.equal(sanitizeNote({ id: 'a1', text: '' }), null);
+  const n = sanitizeNote({
+    id: 'a1', text: 'Note', type: 'task"><script>', due: '2026-13-40', time: '25:00',
+    tags: ['#Work', '<b>', 5], person: { name: 'Bob', birthday: 'soon' }, extra: 'dropped',
+  });
+  assert.equal(n.type, 'note');
+  assert.equal(n.due, null);
+  assert.equal(n.time, null);
+  assert.deepEqual(n.tags, ['work', 'b']);
+  assert.deepEqual(n.person, { name: 'Bob', birthday: null });
+  assert.equal('extra' in n, false);
+  assert.equal(sanitizeNote({ text: 'no id' }, { makeId: () => 'new-id' }).id, 'new-id');
+});

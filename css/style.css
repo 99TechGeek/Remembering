@@ -229,3 +229,4 @@ legend { font-weight: 700; padding: 0 6px; }
 .toast span { flex: 1; }
 #edit-calendar { text-align: left; white-space: normal; }
 #edit-calendar small { font-weight: 400; color: var(--muted); }
+.back-btn { margin-bottom: 12px; }

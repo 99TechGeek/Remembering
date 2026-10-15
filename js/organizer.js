@@ -203,3 +203,47 @@ export function organize(rawText, { now = new Date(), knownPeople = [] } = {}) {
   if (type !== 'person' && birthday && personName) note.person = { name: personName, birthday };
   return note;
 }
+
+const ISO_DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const MMDD = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const SAFE_ID = /^[\w-]{1,64}$/;
+const str = (v, max = 5000) => (typeof v === 'string' ? v.slice(0, max) : '');
+const strList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 100)).slice(0, 20) : []);
+const time = (v) => (Number.isFinite(v) && v > 0 ? v : null);
+
+/**
+ * Make sure a note only contains the fields and value shapes the app
+ * expects. Used on anything from outside the app's own code: restored
+ * backup files and Claude's answers. Returns null if it isn't a note.
+ */
+export function sanitizeNote(n, { makeId } = {}) {
+  if (!n || typeof n !== 'object') return null;
+  const text = str(n.text).trim();
+  if (!text) return null;
+  const id = typeof n.id === 'string' && SAFE_ID.test(n.id) ? n.id : makeId?.();
+  if (!id) return null;
+  const created = time(n.createdAt) ?? Date.now();
+  const personName = str(n.person?.name, 100).trim();
+  return {
+    id,
+    createdAt: created,
+    updatedAt: time(n.updatedAt) ?? created,
+    source: n.source === 'voice' ? 'voice' : 'text',
+    text,
+    type: TYPES.includes(n.type) ? n.type : 'note',
+    title: str(n.title, 200).trim() || text.slice(0, 60),
+    tags: strList(n.tags).map((t) => t.toLowerCase().replace(/^#/, '').replace(/[^\p{L}\p{N}_-]/gu, '')).filter(Boolean),
+    people: strList(n.people),
+    due: ISO_DATE.test(n.due) ? n.due : null,
+    time: HHMM.test(n.time) ? n.time : null,
+    person: personName ? { name: personName, birthday: MMDD.test(n.person?.birthday) ? n.person.birthday : null } : null,
+    done: n.done === true,
+    doneAt: time(n.doneAt),
+    aiOrganized: n.aiOrganized === true,
+    editedByUser: n.editedByUser === true,
+    remindAt: time(n.remindAt),
+    remindManual: n.remindManual === true,
+    reminded: n.reminded === true,
+  };
+}

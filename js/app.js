@@ -1,4 +1,4 @@
-import { organize, TYPE_LABELS } from './organizer.js';
+import { organize, sanitizeNote, TYPE_LABELS } from './organizer.js';
 import { search, highlight, escapeHtml, tokenize, answerFromResults } from './search.js';
 import { buildPeople, upcomingBirthdays, fullMarkdown, tasksMarkdown, peopleMarkdown, byDue } from './documents.js';
 import { relativeLabel, toISODate, formatMonthDay } from './dates.js';
@@ -60,7 +60,9 @@ async function refineWithAI(note, { quiet = false } = {}) {
     const current = state.notes.find((n) => n.id === note.id);
     if (!current || current.updatedAt !== note.updatedAt) return; // edited or deleted meanwhile
     const before = current.type;
-    Object.assign(current, fields, { aiOrganized: true, updatedAt: Date.now() });
+    const merged = sanitizeNote({ ...current, ...fields, aiOrganized: true, updatedAt: Date.now() });
+    if (!merged) return;
+    Object.assign(current, merged);
     syncReminder(current);
     await putNote(current);
     render();
@@ -266,7 +268,7 @@ function renderPeople() {
     const p = people.find((x) => x.name === state.person);
     if (p) {
       el.innerHTML = `
-        <button class="btn" data-back-people style="margin-bottom:12px">← All people</button>
+        <button class="btn back-btn" data-back-people>← All people</button>
         <div class="person-detail">
           <h3>${escapeHtml(p.name)}</h3>
           ${p.birthday ? `<div>🎂 Birthday: <strong>${formatMonthDay(p.birthday)}</strong></div>` : '<div class="small">No birthday noted yet. Say “Birthday of ' + escapeHtml(p.name.split(' ')[0]) + ' is …”</div>'}
@@ -523,7 +525,8 @@ $('#import-file').addEventListener('change', async (e) => {
   if (!file) return;
   try {
     const data = JSON.parse(await file.text());
-    const incoming = (Array.isArray(data) ? data : data.notes || []).filter((n) => n && n.id && n.text);
+    // Only accept well-formed notes, so a tampered file can't inject anything.
+    const incoming = (Array.isArray(data) ? data : data?.notes || []).map((n) => sanitizeNote(n)).filter(Boolean);
     const byId = new Map(state.notes.map((n) => [n.id, n]));
     let added = 0;
     for (const n of incoming) {
@@ -776,7 +779,7 @@ $('#main').addEventListener('keydown', (e) => {
 // ---------- Boot ----------
 
 async function boot() {
-  state.notes = await allNotes();
+  state.notes = (await allNotes()).map((n) => sanitizeNote(n)).filter(Boolean);
   persistStorage();
   if (!speechSupported) $('#capture-hint').textContent = 'Voice input isn’t available in this browser, but you can type notes below. For voice, open this in Chrome, Edge or Safari.';
   render();

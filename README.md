@@ -86,6 +86,18 @@ Your key is stored only in this browser and sent only to `api.anthropic.com`. Si
 - Speech-to-text is done by your browser or OS (Chrome on Android/desktop uses Google's speech service, Safari uses Apple's).
 - Browsers can clear site data, so **download a backup** from Settings now and then. Restoring merges the backup with what's already there.
 
+## Security
+
+- **No server, no accounts, no database to break into.** Notes live only on each person's device.
+- **Claude API key** (optional) is stored only in that browser and sent only to `api.anthropic.com`.
+  It isn't in the code, so other users of the app never use yours. Anthropic API keys are billed
+  separately from a Claude.ai subscription.
+- **Locked-down page:** a Content-Security-Policy lets the page run only its own code and talk only to
+  itself and the Claude API. The Anthropic SDK is bundled in `js/vendor/` rather than loaded from a CDN.
+- **Restored backups and Claude's answers are validated** (`sanitizeNote`) before they're saved or shown.
+- **What to protect:** your phone (lock screen) and your GitHub account (turn on two-factor
+  authentication), since whoever can push to this repo can change the app for everyone who uses it.
+
 ## Code map
 
 ```
@@ -100,6 +112,7 @@ js/ai.js              optional Claude organising and Q&A
 js/speech.js          Web Speech API wrapper
 js/reminders.js       reminder times, due checks, badge count, calendar (.ics) files
 js/db.js              IndexedDB storage and settings
+js/vendor/            bundled Anthropic SDK (loaded only when an API key is set)
 sw.js                 offline cache
 tests/                node --test unit tests
 ```

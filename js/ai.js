@@ -5,7 +5,9 @@ import { toISODate } from './dates.js';
 // api.anthropic.com. Without a key the app uses the on-device rules in
 // organizer.js and search.js.
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@anthropic-ai/sdk@0.129.0/+esm';
+// Official SDK, bundled into this repo (js/vendor) so no code is loaded from a
+// third-party CDN. Only fetched once you add an API key.
+const SDK_URL = './vendor/anthropic-sdk.mjs';
 let clientPromise = null;
 let clientKey = null;
 
