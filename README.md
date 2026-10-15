@@ -42,11 +42,17 @@ npm test            # unit tests for the organiser, dates, search and documents
 
 Microphones only work on `https://` or `localhost`, so opening `index.html` as a file won't give you voice.
 
-### Host it free on GitHub Pages
+### Live app
 
-The included workflow (`.github/workflows/pages.yml`) runs the tests and deploys on every push to `main`.
-Turn it on once: **repo Settings → Pages → Source: GitHub Actions**. Your app will be at
-`https://<your-username>.github.io/<repo>/`.
+It's published at **https://99techgeek.github.io/Remembering/** (GitHub Pages, from the `gh-pages` branch).
+Every push to `main` or `claude/voice-notes-task-tracker-cl2302` runs the tests and republishes the app
+(`.github/workflows/pages.yml`). Installed copies pick up the new version the next time they're opened.
+
+### iPhone: one-tap capture
+
+Shortcuts app → **+** → *Open URLs* → `https://99techgeek.github.io/Remembering/?capture=1`, name it
+"Remember this". Then say "Hey Siri, Remember this", or put it on the Action button or Back Tap.
+That opens in Safari, which keeps its own copy of your notes separate from the home-screen app, so use one or the other.
 
 ## Smarter organising with Claude (optional)
 
