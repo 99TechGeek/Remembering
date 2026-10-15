@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Remembering</title>
+  <meta name="description" content="Your voice-first second brain: say it, it gets filed, find it later.">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Remembering">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="view-title">Remembering</h1>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="search-tab" data-view="search" aria-label="Search and ask">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="icon-btn" id="settings-btn" aria-label="Settings">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.5 7.5 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.5 7.5 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.4 2.5h4l.4-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>
+    </button>
+  </header>
+
+  <main id="main">
+    <!-- Home: capture + today at a glance -->
+    <section class="view" id="view-home" data-title="Remembering">
+      <div class="capture-card">
+        <p class="hint" id="capture-hint">Tap the mic and say anything: a task, a person you met, an idea.</p>
+        <div class="live" id="live" hidden>
+          <span class="final" id="live-final"></span> <span class="interim" id="live-interim"></span>
+        </div>
+        <form id="type-form" class="type-form">
+          <textarea id="type-input" rows="2" placeholder="…or type it here" aria-label="Type a note"></textarea>
+          <button type="submit" class="btn primary" id="type-save">Save</button>
+        </form>
+      </div>
+      <div id="home-sections"></div>
+    </section>
+
+    <section class="view" id="view-tasks" data-title="Tasks" hidden>
+      <div class="chips" id="task-filter" role="tablist">
+        <button class="chip active" data-filter="open">Open</button>
+        <button class="chip" data-filter="today">Today</button>
+        <button class="chip" data-filter="upcoming">Upcoming</button>
+        <button class="chip" data-filter="done">Done</button>
+      </div>
+      <div id="tasks-list"></div>
+    </section>
+
+    <section class="view" id="view-people" data-title="People" hidden>
+      <div id="people-list"></div>
+    </section>
+
+    <section class="view" id="view-notes" data-title="Notes" hidden>
+      <div class="chips" id="notes-filter" role="tablist">
+        <button class="chip active" data-filter="all">All</button>
+        <button class="chip" data-filter="note">Notes</button>
+        <button class="chip" data-filter="idea">Ideas</button>
+        <button class="chip" data-filter="event">Events</button>
+      </div>
+      <div id="tag-chips" class="chips small"></div>
+      <div id="notes-list"></div>
+    </section>
+
+    <section class="view" id="view-search" data-title="Search & Ask" hidden>
+      <form id="search-form" class="search-form">
+        <input id="search-input" type="search" placeholder="Search or ask: “When is Rahul's birthday?”" autocomplete="off" aria-label="Search">
+        <button type="button" class="icon-btn" id="search-mic" aria-label="Ask by voice">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1a7 7 0 0 0 6-6.9h-2Z"/></svg>
+        </button>
+      </form>
+      <div id="answer" class="answer" hidden></div>
+      <div id="search-results"></div>
+    </section>
+  </main>
+
+  <button class="mic" id="mic" aria-label="Start recording a note">
+    <svg class="mic-icon" viewBox="0 0 24 24" width="34" height="34" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1a7 7 0 0 0 6-6.9h-2Z"/></svg>
+    <svg class="stop-icon" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+  </button>
+
+  <nav class="tabbar" aria-label="Sections">
+    <button data-view="home" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3 2 11h3v9h5v-6h4v6h5v-9h3L12 3Z"/></svg><span>Home</span></button>
+    <button data-view="tasks"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg><span>Tasks</span></button>
+    <span class="tab-gap" aria-hidden="true"></span>
+    <button data-view="people"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3Zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13Zm8 0h-1a4.2 4.2 0 0 1 2 3.5V19h6v-2.5c0-2.3-4.7-3.5-7-3.5Z"/></svg><span>People</span></button>
+    <button data-view="notes"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm2 16H8v-2h8v2Zm0-4H8v-2h8v2Zm-3-5V3.5L18.5 9H13Z"/></svg><span>Notes</span></button>
+  </nav>
+
+  <!-- Edit note -->
+  <dialog id="edit-dialog">
+    <form method="dialog" id="edit-form">
+      <h2>Edit note</h2>
+      <label>What you said<textarea name="text" rows="4" required></textarea></label>
+      <label>Title<input name="title"></label>
+      <div class="row">
+        <label>Type
+          <select name="type">
+            <option value="task">Task</option><option value="person">Person</option>
+            <option value="event">Event</option><option value="idea">Idea</option><option value="note">Note</option>
+          </select>
+        </label>
+        <label>Date<input name="due" type="date"></label>
+        <label>Time<input name="time" type="time"></label>
+      </div>
+      <div class="row person-fields">
+        <label>Person's name<input name="personName"></label>
+        <label>Birthday<input name="birthday" placeholder="MM-DD" pattern="\d{2}-\d{2}"></label>
+      </div>
+      <label>Tags <small>(comma separated)</small><input name="tags"></label>
+      <label>People mentioned <small>(comma separated)</small><input name="people"></label>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" id="edit-delete">Delete</button>
+        <span class="spacer"></span>
+        <button value="cancel" class="btn" formnovalidate>Cancel</button>
+        <button value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Settings -->
+  <dialog id="settings-dialog">
+    <form method="dialog" id="settings-form">
+      <h2>Settings</h2>
+      <label>Speech language
+        <input name="lang" placeholder="en-US" list="langs">
+        <datalist id="langs">
+          <option value="en-US"><option value="en-GB"><option value="en-IN"><option value="hi-IN">
+          <option value="es-ES"><option value="fr-FR"><option value="de-DE"><option value="pt-BR">
+        </datalist>
+      </label>
+      <fieldset>
+        <legend>Smarter organising (optional)</legend>
+        <p class="small">Paste a Claude API key from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> to let Claude file notes and answer questions like “what did I promise Sarah?”. The key is stored only in this browser, and notes are sent to Anthropic only when it's set.</p>
+        <label>Claude API key<input name="apiKey" type="password" autocomplete="off" placeholder="sk-ant-…"></label>
+        <label>Model
+          <select name="model">
+            <option value="claude-opus-5-5">Claude Opus 5.5 (best)</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5 (cheapest)</option>
+          </select>
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Your data</legend>
+        <p class="small" id="storage-info"></p>
+        <div class="button-grid">
+          <button type="button" class="btn" data-export="all">Download “Second Brain” (.md)</button>
+          <button type="button" class="btn" data-export="tasks">Tasks.md</button>
+          <button type="button" class="btn" data-export="people">People.md</button>
+          <button type="button" class="btn" data-export="json">Backup (.json)</button>
+          <label class="btn file-btn">Restore backup<input type="file" id="import-file" accept="application/json,.json" hidden></label>
+          <button type="button" class="btn" id="reorganize">Re-organise all notes</button>
+        </div>
+      </fieldset>
+      <div class="dialog-actions">
+        <span class="spacer"></span>
+        <button value="cancel" class="btn" formnovalidate>Close</button>
+        <button value="save" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
