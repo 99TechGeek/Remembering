@@ -54,6 +54,18 @@ Shortcuts app → **+** → *Open URLs* → `https://99techgeek.github.io/Rememb
 "Remember this". Then say "Hey Siri, Remember this", or put it on the Action button or Back Tap.
 That opens in Safari, which keeps its own copy of your notes separate from the home-screen app, so use one or the other.
 
+## Reminders
+
+Tasks and events with a date get a reminder automatically: at the time you said, 30 minutes before an event,
+or at 9:00 if you didn't say a time. Change or clear it on any note (tap it → *Remind me at*).
+
+- **Turn them on:** Settings → *Turn on reminders*. On iPhone this only works in the Home Screen app (iOS 16.4+).
+- **When it fires** you get a notification, plus an in-app alert with *Done*, *In 10 min* and *Open*.
+- **The app icon badge** shows how many tasks are due today or overdue.
+- **Limitation:** with no server, the app can only check reminders while it's open or recently used.
+  iOS doesn't let a website wake itself up later. For anything you can't miss, tap
+  **📅 Add to iPhone Calendar** on the note: the Calendar app then alerts you even if Remembering is closed.
+
 ## Smarter organising with Claude (optional)
 
 Without any setup, notes are organised on your device by built-in rules: phrases like "I need to", "remind me", "met", "birthday", dates such as "next Friday" or "12th June", and topic keywords.
@@ -86,6 +98,7 @@ js/search.js          local ranked full-text search
 js/documents.js       people directory, birthdays, Markdown export
 js/ai.js              optional Claude organising and Q&A
 js/speech.js          Web Speech API wrapper
+js/reminders.js       reminder times, due checks, badge count, calendar (.ics) files
 js/db.js              IndexedDB storage and settings
 sw.js                 offline cache
 tests/                node --test unit tests
@@ -94,6 +107,6 @@ tests/                node --test unit tests
 ## Ideas for later
 
 - Sync across devices (e.g. a small backend or your own Google Drive/Dropbox)
-- Push notifications for due tasks and birthdays
+- True background push notifications (needs a small server, e.g. a free Cloudflare Worker)
 - Keep the original audio alongside the transcript
 - Recurring tasks ("every Monday")

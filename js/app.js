@@ -5,6 +5,9 @@ import { relativeLabel, toISODate, formatMonthDay } from './dates.js';
 import { allNotes, putNote, deleteNote, newId, persistStorage, loadSettings, saveSettings } from './db.js';
 import { speechSupported, listen } from './speech.js';
 import { aiOrganize, aiAsk } from './ai.js';
+import {
+  syncReminder, dueReminders, nextReminder, badgeCount, buildICS, formatRemindAt, toDateTimeLocal, fromDateTimeLocal,
+} from './reminders.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -40,13 +43,14 @@ async function saveNote(rawText, source = 'voice') {
     aiOrganized: false,
     ...organize(text, { knownPeople: knownPeople() }),
   };
+  syncReminder(note);
   state.notes.push(note);
   await putNote(note);
   render();
-  toast(`Saved as ${TYPE_LABELS[note.type]}: “${note.title}”`, [
-    ['Edit', () => openEdit(note.id)],
-    ['Undo', () => removeNote(note.id)],
-  ]);
+  const when = note.remindAt ? ` · ⏰ ${formatRemindAt(note.remindAt)}` : '';
+  const actions = [['Edit', () => openEdit(note.id)], ['Undo', () => removeNote(note.id)]];
+  if (note.remindAt && notificationState() === 'ask') actions.unshift(['Turn on reminders', enableNotifications]);
+  toast(`Saved as ${TYPE_LABELS[note.type]}: “${note.title}”${when}`, actions);
   if (aiOn()) refineWithAI(note);
 }
 
@@ -57,6 +61,7 @@ async function refineWithAI(note, { quiet = false } = {}) {
     if (!current || current.updatedAt !== note.updatedAt) return; // edited or deleted meanwhile
     const before = current.type;
     Object.assign(current, fields, { aiOrganized: true, updatedAt: Date.now() });
+    syncReminder(current);
     await putNote(current);
     render();
     if (!quiet && before !== current.type) toast(`Claude re-filed it as ${TYPE_LABELS[current.type]}`);
@@ -85,6 +90,8 @@ async function toggleDone(id) {
   n.done = !n.done;
   n.doneAt = n.done ? Date.now() : null;
   n.updatedAt = Date.now();
+  if (n.done) n.reminded = true; // no reminder for finished tasks
+  else if (n.remindAt && n.remindAt > Date.now()) n.reminded = false;
   await putNote(n);
   render();
   if (n.done) toast('Done ✓', [['Undo', () => toggleDone(id)]]);
@@ -92,56 +99,67 @@ async function toggleDone(id) {
 
 // ---------- Voice ----------
 
+function setMicUI(mode, target = 'note') {
+  const mic = $('#mic');
+  mic.classList.toggle('recording', mode === 'recording');
+  mic.classList.toggle('busy', mode === 'saving');
+  mic.setAttribute('aria-label', mode === 'recording' ? 'Stop recording' : 'Start recording a note');
+  $('#search-mic').classList.toggle('active', mode === 'recording' && target === 'search');
+  const showLive = mode !== 'idle' && target === 'note';
+  $('#live').hidden = !showLive;
+  $('#capture-hint').hidden = showLive;
+}
+
 function startRecording(target = 'note') {
   if (!speechSupported) {
-    toast('Voice input isn’t supported in this browser. Try Chrome, Edge or Safari, or type instead.');
+    toast('Voice input isn’t supported here. Tap the text box and use the keyboard’s mic instead.');
     $('#type-input').focus();
     return;
   }
   if (state.recording) return stopRecording();
   if (target === 'note' && state.view !== 'home') show('home');
-  const live = $('#live');
-  const mic = $('#mic');
-  live.hidden = target !== 'note';
   $('#live-final').textContent = '';
   $('#live-interim').textContent = 'Listening…';
-  $('#capture-hint').hidden = target === 'note';
-  mic.classList.add('recording');
-  mic.setAttribute('aria-label', 'Stop recording');
-  $('#search-mic').classList.toggle('active', target === 'search');
+  setMicUI('recording', target);
 
-  state.recording = listen({
-    lang: state.settings.lang,
-    onText(final, interim) {
-      if (target === 'search') {
-        $('#search-input').value = `${final} ${interim}`.trim();
-        runLocalSearch();
-      } else {
-        $('#live-final').textContent = final;
-        $('#live-interim').textContent = interim;
-      }
-    },
-    onEnd(final) {
-      state.recording = null;
-      mic.classList.remove('recording');
-      mic.setAttribute('aria-label', 'Start recording a note');
-      $('#search-mic').classList.remove('active');
-      live.hidden = true;
-      $('#capture-hint').hidden = false;
-      if (target === 'search') {
-        if (final) { $('#search-input').value = final; runSearch(true); }
-      } else if (final) {
-        saveNote(final, 'voice');
-      } else {
-        toast('Didn’t catch anything. Try again a little closer to the mic.');
-      }
-    },
-    onError(msg) { toast(msg); },
-  });
+  try {
+    state.recording = listen({
+      lang: state.settings.lang,
+      onText(text, interim) {
+        if (target === 'search') {
+          $('#search-input').value = `${text} ${interim}`.trim();
+          runLocalSearch();
+        } else {
+          $('#live-final').textContent = text;
+          $('#live-interim').textContent = interim;
+        }
+      },
+      onEnd(text) {
+        state.recording = null;
+        setMicUI('idle');
+        if (target === 'search') {
+          if (text) { $('#search-input').value = text; runSearch(true); }
+        } else if (text) {
+          saveNote(text, 'voice');
+        } else {
+          toast('Didn’t catch anything. Try again, or type it instead.');
+        }
+      },
+      onError(msg) { toast(msg); },
+    });
+  } catch (err) {
+    state.recording = null;
+    setMicUI('idle');
+    toast(`Couldn’t start the microphone (${shortError(err)}). Tap the text box and use the keyboard’s mic instead.`);
+  }
 }
 
 function stopRecording() {
-  state.recording?.stop();
+  if (!state.recording) return;
+  // Show it stopped straight away; the transcript is saved a moment later.
+  setMicUI('saving');
+  $('#live-interim').textContent = 'Saving…';
+  state.recording.stop();
 }
 
 // ---------- Rendering ----------
@@ -163,6 +181,7 @@ function noteItem(n, { query = '', showType = true } = {}) {
   const people = (n.people || []).filter((p) => p !== n.person?.name || n.type !== 'person')
     .map((p) => `<span>👤 ${escapeHtml(p)}</span>`).join(' ');
   const bday = n.person?.birthday ? `<span>🎂 ${formatMonthDay(n.person.birthday)}</span>` : '';
+  const remind = n.remindAt && !n.done && !n.reminded ? `<span>⏰ ${escapeHtml(formatRemindAt(n.remindAt))}</span>` : '';
   return `
     <div class="item${n.done ? ' done' : ''}" data-open="${n.id}" role="button" tabindex="0">
       ${isTask ? `<button class="check${n.done ? ' on' : ''}" data-check="${n.id}" aria-label="${n.done ? 'Mark not done' : 'Mark done'}">${n.done ? CHECK : ''}</button>` : ''}
@@ -171,7 +190,7 @@ function noteItem(n, { query = '', showType = true } = {}) {
         ${text ? `<div class="text">${text}</div>` : ''}
         <div class="meta">
           ${showType ? `<span class="badge ${n.type}">${TYPE_LABELS[n.type]}</span>` : ''}
-          ${dueHtml(n)} ${bday} ${people} ${tags}
+          ${dueHtml(n)} ${remind} ${bday} ${people} ${tags}
           <span>${new Date(n.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}${n.source === 'voice' ? ' 🎙' : ''}</span>
         </div>
       </div>
@@ -271,6 +290,8 @@ function renderNotes() {
 }
 
 function render() {
+  updateBadge();
+  scheduleReminders();
   renderHome();
   renderTasks();
   renderPeople();
@@ -368,6 +389,8 @@ function openEdit(id) {
   f.birthday.value = n.person?.birthday || '';
   f.tags.value = (n.tags || []).join(', ');
   f.people.value = (n.people || []).join(', ');
+  f.remindAt.value = n.remindAt ? toDateTimeLocal(n.remindAt) : '';
+  f.remindAt.dataset.touched = '';
   $('.person-fields').hidden = n.type !== 'person' && !n.person;
   $('#edit-dialog').showModal();
 }
@@ -391,9 +414,40 @@ $('#edit-dialog').addEventListener('close', async () => {
     updatedAt: Date.now(),
     editedByUser: true,
   });
+  if (f.remindAt.dataset.touched) {
+    n.remindManual = true;
+    n.remindAt = fromDateTimeLocal(f.remindAt.value);
+    n.reminded = false;
+  } else {
+    syncReminder(n);
+  }
   await putNote(n);
   render();
   if (textChanged && aiOn()) refineWithAI(n);
+});
+
+$('#edit-form').remindAt.addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+$('#edit-remind-clear').addEventListener('click', () => {
+  const input = $('#edit-form').remindAt;
+  input.value = '';
+  input.dataset.touched = '1';
+});
+$('#edit-calendar').addEventListener('click', () => {
+  const n = state.editing;
+  if (!n) return;
+  const f = $('#edit-form');
+  // Use what's in the form, even if not saved yet.
+  const draft = {
+    ...n,
+    title: f.title.value.trim() || n.title,
+    text: f.text.value.trim() || n.text,
+    due: f.due.value || null,
+    time: f.time.value || null,
+    remindAt: fromDateTimeLocal(f.remindAt.value) || n.remindAt,
+  };
+  if (!draft.remindAt && !draft.due) { toast('Pick a date or reminder time first.'); return; }
+  const name = `${draft.title.replace(/[^\w\s-]/g, '').trim().slice(0, 40) || 'reminder'}.ics`;
+  download(name, buildICS(draft, { appUrl: location.origin + location.pathname }), 'text/calendar');
 });
 
 $('#edit-delete').addEventListener('click', async () => {
@@ -417,8 +471,11 @@ function openSettings() {
   f.model.value = state.settings.model;
   const voice = state.notes.filter((n) => n.source === 'voice').length;
   $('#storage-info').textContent = `${state.notes.length} notes on this device (${voice} by voice). Notes are stored only in this browser, so download a backup now and then.`;
+  renderReminderSettings();
   $('#settings-dialog').showModal();
 }
+$('#notif-enable').addEventListener('click', enableNotifications);
+$('#notif-test').addEventListener('click', () => notify({ id: 'test', title: 'Test reminder', text: 'This is what a reminder looks like.' }));
 
 $('#settings-dialog').addEventListener('close', () => {
   if ($('#settings-dialog').returnValue !== 'save') return;
@@ -478,6 +535,7 @@ $('#reorganize').addEventListener('click', async () => {
     if (n.editedByUser) continue;
     const { done } = n;
     Object.assign(n, organize(n.text, { now: new Date(n.createdAt), knownPeople: people }), { done });
+    syncReminder(n);
     await putNote(n);
   }
   render();
@@ -491,6 +549,130 @@ $('#reorganize').addEventListener('click', async () => {
   btn.disabled = false;
   btn.textContent = 'Re-organise all notes';
   toast('All notes re-organised.');
+});
+
+// ---------- Reminders & notifications ----------
+
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+/** 'on' | 'ask' | 'blocked' | 'install' (iPhone: only home-screen apps can notify) | 'unsupported' */
+function notificationState() {
+  if (!('Notification' in window)) return isIOS && !isStandalone() ? 'install' : 'unsupported';
+  if (Notification.permission === 'granted') return 'on';
+  if (Notification.permission === 'denied') return 'blocked';
+  return 'ask';
+}
+
+async function enableNotifications() {
+  const st = notificationState();
+  if (st === 'install') { toast('First add this app to your Home Screen (Share → Add to Home Screen), then open it from the icon.'); return; }
+  if (st === 'unsupported') { toast('This browser can’t show notifications. Use “Add to Calendar” on a task instead.'); return; }
+  if (st === 'blocked') { toast('Notifications are blocked. On iPhone: Settings → Notifications → Remembering → Allow.'); return; }
+  const result = await Notification.requestPermission();
+  renderReminderSettings();
+  if (result === 'granted') {
+    toast('Reminders are on.');
+    notify({ id: 'test', title: 'Reminders are on', text: 'You’ll get a nudge like this when something is due.' });
+  }
+}
+
+async function notify(n) {
+  if (notificationState() !== 'on') return false;
+  const title = `⏰ ${n.title}`;
+  const opts = {
+    body: n.due ? `${relativeLabel(n.due)}${n.time ? ' at ' + n.time : ''}` : (n.text || ''),
+    tag: n.id,
+    data: { id: n.id },
+    icon: 'icons/icon-192.png',
+    badge: 'icons/icon-192.png',
+  };
+  try {
+    const reg = await navigator.serviceWorker?.ready;
+    if (reg?.showNotification) { await reg.showNotification(title, opts); return true; }
+    new Notification(title, opts);
+    return true;
+  } catch (err) {
+    console.warn('notification failed', err);
+    return false;
+  }
+}
+
+let reminderTimer = null;
+let checking = false;
+
+async function checkReminders() {
+  if (checking) return;
+  checking = true;
+  try {
+    const due = dueReminders(state.notes);
+    for (const n of due) {
+      n.reminded = true;
+      await putNote(n);
+      await notify(n);
+    }
+    if (due.length && document.visibilityState === 'visible') {
+      const n = due[due.length - 1];
+      const more = due.length > 1 ? ` (+${due.length - 1} more)` : '';
+      toast(`⏰ ${n.title}${more}`, [
+        ...(n.type === 'task' ? [['Done', () => toggleDone(n.id)]] : []),
+        ['In 10 min', () => snooze(n.id, 10)],
+        ['Open', () => openEdit(n.id)],
+      ]);
+    }
+    if (due.length) render();
+  } finally {
+    checking = false;
+  }
+}
+
+async function snooze(id, minutes) {
+  const n = state.notes.find((x) => x.id === id);
+  if (!n) return;
+  Object.assign(n, { remindAt: Date.now() + minutes * 60000, remindManual: true, reminded: false, updatedAt: Date.now() });
+  await putNote(n);
+  render();
+  toast(`I’ll remind you again in ${minutes} minutes.`);
+}
+
+function scheduleReminders() {
+  clearTimeout(reminderTimer);
+  if (dueReminders(state.notes).length) { setTimeout(checkReminders, 0); return; }
+  const next = nextReminder(state.notes);
+  if (!next) return;
+  // Re-check at least every minute: timers drift or pause in the background.
+  const wait = Math.min(Math.max(next.remindAt - Date.now(), 0) + 500, 60000);
+  reminderTimer = setTimeout(() => { checkReminders(); scheduleReminders(); }, wait);
+}
+
+function updateBadge() {
+  const count = badgeCount(state.notes, today());
+  try {
+    if (count) navigator.setAppBadge?.(count)?.catch?.(() => {});
+    else navigator.clearAppBadge?.()?.catch?.(() => {});
+  } catch { /* not supported */ }
+}
+
+function renderReminderSettings() {
+  const st = notificationState();
+  const text = {
+    on: '✅ Reminders are on. You’ll get a notification when a task is due.',
+    ask: 'Get a notification when a task or event is due.',
+    blocked: 'Notifications are blocked. On iPhone: Settings → Notifications → Remembering → Allow Notifications.',
+    install: 'On iPhone, reminders work in the Home Screen app: tap Share → Add to Home Screen, then open Remembering from the icon.',
+    unsupported: 'This browser can’t show notifications. Use “Add to Calendar” on a task instead.',
+  }[st];
+  $('#notif-status').textContent = text;
+  $('#notif-enable').hidden = st !== 'ask';
+  $('#notif-test').hidden = st !== 'on';
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { checkReminders(); scheduleReminders(); updateBadge(); }
+});
+
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  if (e.data?.type === 'open-note' && e.data.id) openEdit(e.data.id);
 });
 
 // ---------- Toast ----------
@@ -507,7 +689,7 @@ function toast(msg, actions = []) {
   }
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, actions.length ? 6000 : 3500);
+  toastTimer = setTimeout(() => { el.hidden = true; }, actions.length ? 8000 : 3500);
 }
 
 // ---------- Events ----------
@@ -587,6 +769,10 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   const view = params.get('view');
   if (view && $(`#view-${view}`)) show(view);
+  const openId = params.get('open');
+  if (openId && state.notes.some((n) => n.id === openId)) openEdit(openId);
+  if (params.has('open') || params.has('capture') || params.has('view')) history.replaceState(null, '', location.pathname);
+  checkReminders();
   if (params.has('capture')) {
     // Launched from the home-screen "Quick note" shortcut. Some browsers need
     // a tap before the mic can start, so fail quietly.

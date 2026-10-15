@@ -107,6 +107,11 @@
         <label>Date<input name="due" type="date"></label>
         <label>Time<input name="time" type="time"></label>
       </div>
+      <div class="remind-row">
+        <label>⏰ Remind me at<input name="remindAt" type="datetime-local"></label>
+        <button type="button" class="btn" id="edit-remind-clear" aria-label="No reminder">Clear</button>
+      </div>
+      <button type="button" class="btn" id="edit-calendar">📅 Add to iPhone Calendar <small>(alert even when the app is closed)</small></button>
       <div class="row person-fields">
         <label>Person's name<input name="personName"></label>
         <label>Birthday<input name="birthday" placeholder="MM-DD" pattern="\d{2}-\d{2}"></label>
@@ -144,6 +149,15 @@
             <option value="claude-haiku-5-5">Claude Haiku 5.5 (cheapest)</option>
           </select>
         </label>
+      </fieldset>
+      <fieldset>
+        <legend>Reminders</legend>
+        <p class="small" id="notif-status"></p>
+        <p class="small">Tasks and events with a date remind you automatically: at the time you said, 30 minutes before an event, or at 9:00 if you gave no time. You can change it on any note.</p>
+        <div class="button-grid">
+          <button type="button" class="btn primary" id="notif-enable">Turn on reminders</button>
+          <button type="button" class="btn" id="notif-test">Send a test reminder</button>
+        </div>
       </fieldset>
       <fieldset>
         <legend>Your data</legend>
