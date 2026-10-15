@@ -65,6 +65,7 @@ a { color: var(--accent); }
   display: grid; place-items: center; cursor: pointer;
 }
 .icon-btn:hover, .icon-btn.active { background: var(--surface-2); }
+.icon-btn.recording { background: var(--rec); color: #fff; animation: pulse 1.4s infinite; }
 
 main { max-width: 720px; margin: 0 auto; padding: 4px 16px 24px; }
 
@@ -113,7 +114,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent); ou
   70% { box-shadow: 0 0 0 18px transparent; }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
-@media (prefers-reduced-motion: reduce) { .mic.recording { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .mic.recording, .icon-btn.recording { animation: none; } }
 
 .tabbar {
   position: fixed; z-index: 10; left: 0; right: 0; bottom: 0;

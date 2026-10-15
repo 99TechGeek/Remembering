@@ -1,5 +1,7 @@
 // Local full-text search over notes. Pure functions, no DOM.
 
+import { relativeLabel } from './dates.js';
+
 const STOP = new Set([
   'a', 'an', 'the', 'is', 'are', 'was', 'were', 'of', 'to', 'in', 'on', 'for', 'and', 'or', 'at', 'by',
   'what', 'whats', "what's", 'when', 'whens', 'where', 'who', 'whos', 'how', 'did', 'do', 'does', 'i', 'my',
@@ -71,6 +73,31 @@ export function search(notes, query, { limit = 50 } = {}) {
   }
   results.sort((a, b) => b.score - a.score || (b.note.createdAt || 0) - (a.note.createdAt || 0));
   return results.slice(0, limit);
+}
+
+/**
+ * A plain-sentence answer to a question like "do I have any interviews?"
+ * built from search results, for when Claude isn't set up.
+ * Finished tasks and dates in the past don't count as "yes".
+ */
+export function answerFromResults(query, results, { today, now = new Date() } = {}) {
+  if (!results.length) return `I couldn't find anything about “${query.replace(/[?.!]+$/, '').trim()}” in your notes.`;
+  const top = results[0].score;
+  const relevant = results.filter((r) => r.score >= top * 0.5).map((r) => r.note);
+  const current = relevant.filter((n) => !n.done && !(n.due && today && n.due < today));
+  const pool = current.length ? current : relevant;
+  // Soonest dated items first, then the rest.
+  pool.sort((a, b) => (a.due && b.due ? a.due.localeCompare(b.due) || (a.time || '').localeCompare(b.time || '') : a.due ? -1 : b.due ? 1 : 0));
+  const describe = (n) => {
+    const when = n.due ? ` (${relativeLabel(n.due, now)}${n.time ? ' at ' + n.time : ''})` : '';
+    const done = n.done ? ', done' : '';
+    return `“${n.title}”${when}${done}`;
+  };
+  const shown = pool.slice(0, 3).map(describe);
+  const more = pool.length > 3 ? `, and ${pool.length - 3} more` : '';
+  const list = shown.length > 1 ? `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}` : shown[0];
+  if (!current.length) return `Nothing coming up, but I found ${list}${more}.`;
+  return `Yes: ${list}${more}.`;
 }
 
 /** Wrap matching words in <mark>, escaping HTML. */

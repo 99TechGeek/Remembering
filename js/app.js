@@ -1,5 +1,5 @@
 import { organize, TYPE_LABELS } from './organizer.js';
-import { search, highlight, escapeHtml, tokenize } from './search.js';
+import { search, highlight, escapeHtml, tokenize, answerFromResults } from './search.js';
 import { buildPeople, upcomingBirthdays, fullMarkdown, tasksMarkdown, peopleMarkdown, byDue } from './documents.js';
 import { relativeLabel, toISODate, formatMonthDay } from './dates.js';
 import { allNotes, putNote, deleteNote, newId, persistStorage, loadSettings, saveSettings } from './db.js';
@@ -104,7 +104,13 @@ function setMicUI(mode, target = 'note') {
   mic.classList.toggle('recording', mode === 'recording');
   mic.classList.toggle('busy', mode === 'saving');
   mic.setAttribute('aria-label', mode === 'recording' ? 'Stop recording' : 'Start recording a note');
-  $('#search-mic').classList.toggle('active', mode === 'recording' && target === 'search');
+  const searchMic = $('#search-mic');
+  const listeningForSearch = mode === 'recording' && target === 'search';
+  searchMic.classList.toggle('recording', listeningForSearch);
+  searchMic.setAttribute('aria-label', listeningForSearch ? 'Stop listening' : 'Ask by voice');
+  $('#search-input').placeholder = listeningForSearch
+    ? 'Listening… ask your question'
+    : 'Search or ask: “When is Rahul’s birthday?”';
   const showLive = mode !== 'idle' && target === 'note';
   $('#live').hidden = !showLive;
   $('#capture-hint').hidden = showLive;
@@ -118,6 +124,9 @@ function startRecording(target = 'note') {
   }
   if (state.recording) return stopRecording();
   if (target === 'note' && state.view !== 'home') show('home');
+  // On iPhone an open keyboard can grab the microphone; close it first.
+  document.activeElement?.blur?.();
+  if (target === 'search') { $('#search-input').value = ''; $('#answer').hidden = true; }
   $('#live-final').textContent = '';
   $('#live-interim').textContent = 'Listening…';
   setMicUI('recording', target);
@@ -125,6 +134,9 @@ function startRecording(target = 'note') {
   try {
     state.recording = listen({
       lang: state.settings.lang,
+      // A question is one sentence: stop by itself after a short pause.
+      // A note keeps going until you tap stop, so pauses don't cut it off.
+      ...(target === 'search' ? { continuous: false, silenceMs: 1500, maxMs: 15000 } : {}),
       onText(text, interim) {
         if (target === 'search') {
           $('#search-input').value = `${text} ${interim}`.trim();
@@ -139,6 +151,7 @@ function startRecording(target = 'note') {
         setMicUI('idle');
         if (target === 'search') {
           if (text) { $('#search-input').value = text; runSearch(true); }
+        else toast('Didn’t catch that. Tap the mic and ask again.');
         } else if (text) {
           saveNote(text, 'voice');
         } else {
@@ -159,6 +172,7 @@ function stopRecording() {
   // Show it stopped straight away; the transcript is saved a moment later.
   setMicUI('saving');
   $('#live-interim').textContent = 'Saving…';
+  $('#search-input').placeholder = 'One moment…';
   state.recording.stop();
 }
 
@@ -342,7 +356,7 @@ async function runSearch(fromSubmit = false) {
   const results = runLocalSearch();
   if (!q || !fromSubmit) return;
   const box = $('#answer');
-  const local = localAnswer(q);
+  const local = localAnswer(q) ?? (looksLikeQuestion(q) ? answerFromResults(q, results, { today: today() }) : null);
   if (!aiOn() || !looksLikeQuestion(q)) {
     if (local) { box.hidden = false; box.innerHTML = `<div class="label">Answer</div>${escapeHtml(local)}`; }
     return;

@@ -1,5 +1,5 @@
 // Offline support: keep a copy of the app so it opens without a connection.
-const CACHE = 'remembering-v2';
+const CACHE = 'remembering-v3';
 const SHELL = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/app.js', 'js/organizer.js', 'js/dates.js', 'js/search.js', 'js/documents.js',

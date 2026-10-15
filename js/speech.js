@@ -12,16 +12,21 @@ export const speechSupported = Boolean(Recognition);
 const STOP_GRACE_MS = 1200;
 
 /**
- * Start listening. Callbacks:
+ * Start listening. Options:
+ *   continuous  keep listening through pauses until stop() (notes); false
+ *               for one sentence (search questions)
+ *   silenceMs   stop by itself this long after the last word (0 = never)
+ *   maxMs       stop by itself after this long in total (0 = never)
+ * Callbacks:
  *   onText(text, interimText) — live transcript
  *   onEnd(text)               — called exactly once when listening stops
  *   onError(message)
  * Returns { stop() }. Throws if the browser refuses to start.
  */
-export function listen({ lang, onText, onEnd, onError }) {
+export function listen({ lang, onText, onEnd, onError, continuous = true, silenceMs = 0, maxMs = 0 }) {
   const rec = new Recognition();
   rec.lang = lang || 'en-US';
-  rec.continuous = true;
+  rec.continuous = continuous;
   rec.interimResults = true;
 
   let committed = ''; // text from earlier sessions, if the browser restarted
@@ -32,6 +37,9 @@ export function listen({ lang, onText, onEnd, onError }) {
   let restarts = 0;
   let sessionStart = Date.now();
   let killTimer = null;
+  let silenceTimer = null;
+  let maxTimer = null;
+  let api = null;
 
   const join = (...parts) => parts.filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 
@@ -39,6 +47,8 @@ export function listen({ lang, onText, onEnd, onError }) {
     if (finished) return;
     finished = true;
     clearTimeout(killTimer);
+    clearTimeout(silenceTimer);
+    clearTimeout(maxTimer);
     rec.onresult = rec.onend = rec.onerror = null;
     // iOS often leaves results "interim" forever, so keep them.
     onEnd?.(join(committed, current, interim));
@@ -57,6 +67,10 @@ export function listen({ lang, onText, onEnd, onError }) {
     current = fin.trim();
     interim = int.trim();
     onText?.(join(committed, current), interim);
+    if (silenceMs && (current || interim)) {
+      clearTimeout(silenceTimer);
+      silenceTimer = setTimeout(() => api.stop(), silenceMs);
+    }
   };
 
   rec.onerror = (e) => {
@@ -75,7 +89,7 @@ export function listen({ lang, onText, onEnd, onError }) {
     // Some browsers stop after a pause even in continuous mode. Restart so a
     // pause mid-thought doesn't cut you off — but never after stop(), and not
     // if the session died instantly (that would loop).
-    if (!stopping && restarts < 10 && Date.now() - sessionStart > 1000) {
+    if (continuous && !stopping && restarts < 10 && Date.now() - sessionStart > 1000) {
       committed = join(committed, current, interim);
       current = interim = '';
       restarts++;
@@ -86,8 +100,9 @@ export function listen({ lang, onText, onEnd, onError }) {
   };
 
   rec.start();
+  if (maxMs) maxTimer = setTimeout(() => api.stop(), maxMs);
 
-  return {
+  api = {
     stop() {
       if (finished) return;
       if (stopping) { // second tap: stop waiting entirely
@@ -103,4 +118,5 @@ export function listen({ lang, onText, onEnd, onError }) {
       }, STOP_GRACE_MS);
     },
   };
+  return api;
 }

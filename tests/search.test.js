@@ -48,3 +48,19 @@ test('markdown documents', () => {
   const full = fullMarkdown(notes, now);
   assert.match(full, /## Rahul Verma\n\n- \*\*Birthday:\*\* October 20/);
 });
+
+test('answers "do I have any …?" questions from matches', async () => {
+  const { answerFromResults } = await import('../js/search.js');
+  const pool = [
+    mk('Interview with Google on Friday at 3pm'),
+    mk('Interview at Amazon next Tuesday'),
+    mk('Old interview at Meta', { type: 'event', due: '2026-10-01' }),
+  ];
+  const q = 'do I have any interviews?';
+  const a = answerFromResults(q, search(pool, q), { today: '2026-10-15', now });
+  assert.match(a, /^Yes: “Interview with Google on Friday at 3pm” \(Tomorrow at 15:00\) and “Interview at Amazon next Tuesday”/);
+  assert.doesNotMatch(a, /Meta/);
+  const past = answerFromResults(q, search([pool[2]], q), { today: '2026-10-15', now });
+  assert.match(past, /^Nothing coming up, but I found “Old interview at Meta”/);
+  assert.equal(answerFromResults('any flights?', [], { today: '2026-10-15' }), 'I couldn’t find anything about “any flights” in your notes.'.replace('’', "'"));
+});
